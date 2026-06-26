@@ -1,0 +1,7 @@
+<Bindings>
+  <Binding name="CLICK RTC_UpButton:LeftButton" category="ADDONS" header="RAIDTARGETCURSOR"></Binding>
+  <Binding name="CLICK RTC_DownButton:LeftButton" category="ADDONS"></Binding>
+  <Binding name="CLICK RTC_LeftButton:LeftButton" category="ADDONS"></Binding>
+  <Binding name="CLICK RTC_RightButton:LeftButton" category="ADDONS"></Binding>
+  <Binding name="CLICK RTC_SelfButton:LeftButton" category="ADDONS"></Binding>
+</Bindings>

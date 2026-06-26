@@ -1,0 +1,12 @@
+## Interface: 120005, 120001, 120000, 110207, 110205
+## Version: 0.2.0
+## Title: Raid Target Cursor
+## Notes: Hard-target Blizzard raid and party frames with directional key binds.
+## Author: tristkram + Codex
+
+## DefaultState: enabled
+## LoadOnDemand: 0
+## SavedVariables: RaidTargetCursorDB
+## Bindings: Bindings.xml
+
+RaidTargetCursor.lua
