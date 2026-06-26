@@ -11,7 +11,7 @@ It was vibe-coded with Codex, then tested and adjusted in-game. The goal is prac
 - Works through WoW secure action buttons, so targeting can happen in combat.
 - Builds its navigation map from visible Blizzard party/raid frames.
 - Debounced rebuilds for better behavior with frame layout addons such as FrameSort.
-- Slash commands for status, debug, manual rebuilds, and map dumps.
+- Slash commands for status, debug, manual rebuilds, map dumps, and diagnostics.
 
 ## Requirements
 
@@ -26,6 +26,8 @@ It was vibe-coded with Codex, then tested and adjusted in-game. The goal is prac
 /rtc status
 /rtc rebuild
 /rtc dump
+/rtc frames
+/rtc events
 /rtc reset
 /rtc debug
 ```

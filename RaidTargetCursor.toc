@@ -1,5 +1,5 @@
 ## Interface: 120005, 120001, 120000, 110207, 110205
-## Version: 0.2.0
+## Version: 0.2.1
 ## Title: Raid Target Cursor
 ## Notes: Hard-target Blizzard raid and party frames with directional key binds.
 ## Author: tristkram + Codex

@@ -18,6 +18,7 @@ local pendingRefresh = false
 local lastBuildReason = "not built"
 local rebuildToken = 0
 local layoutHooked = false
+local eventLog = {}
 
 _G.BINDING_HEADER_RAIDTARGETCURSOR = "Raid Target Cursor"
 _G["BINDING_NAME_CLICK RTC_UpButton:LeftButton"] = "Raid Cursor Up"
@@ -33,6 +34,19 @@ end
 local function Debug(message)
     if db and db.debug then
         Print(message)
+    end
+end
+
+local function AddEventLog(message)
+    local timestamp = GetTime and GetTime() or 0
+    eventLog[#eventLog + 1] = string.format("%.1f %s", timestamp, message)
+
+    while #eventLog > 30 do
+        table.remove(eventLog, 1)
+    end
+
+    if db then
+        db.eventLog = eventLog
     end
 end
 
@@ -418,10 +432,16 @@ local function PublishSecureMap()
 end
 
 function RTC:Rebuild(reason)
+    AddEventLog("rebuild " .. tostring(reason))
+
     if InCombatLockdown() then
         pendingRefresh = true
         lastBuildReason = "pending: " .. (reason or "combat lockdown")
-        Debug(lastBuildReason)
+        if reason == "slash rebuild" then
+            Print("rebuild queued until combat ends")
+        else
+            Debug(lastBuildReason)
+        end
         return
     end
 
@@ -439,8 +459,10 @@ function RTC:Rebuild(reason)
 
     if #nodes == 0 then
         Debug("no visible Blizzard raid/party frames found")
+        AddEventLog("mapped 0 frames")
     else
         Debug(string.format("mapped %d visible frame(s)", #nodes))
+        AddEventLog(string.format("mapped %d frames", #nodes))
     end
 
 end
@@ -454,6 +476,19 @@ local function ScheduleRebuild(reason, delay)
             RTC:Rebuild(reason)
         end
     end)
+end
+
+local function ScheduleRebuildBurst(reason, delays)
+    rebuildToken = rebuildToken + 1
+    local token = rebuildToken
+
+    for _, delay in ipairs(delays) do
+        C_Timer.After(delay, function()
+            if token == rebuildToken then
+                RTC:Rebuild(reason)
+            end
+        end)
+    end
 end
 
 local function HookBlizzardLayout()
@@ -542,16 +577,98 @@ function RTC:Dump()
     Print("out of combat test: /click RTC_RightButton or /click RTC_DownButton")
 end
 
+function RTC:Frames()
+    local printed = 0
+    local seenFrames = {}
+
+    local function PrintFrame(frame)
+        if printed >= 30 or not frame or seenFrames[frame] or not LooksLikeBlizzardGroupFrame(frame) then
+            return
+        end
+        seenFrames[frame] = true
+
+        local name = frame.GetName and frame:GetName() or "unnamed"
+        local unit = frame.displayedUnit or frame.unit
+        if not unit and frame.GetAttribute then
+            unit = frame:GetAttribute("unit")
+        end
+
+        local shown = frame.IsShown and frame:IsShown() and "shown" or "hidden"
+        local visible = frame.IsVisible and frame:IsVisible() and "visible" or "not-visible"
+        local x, y = nil, nil
+        if frame.GetCenter then
+            x, y = frame:GetCenter()
+        end
+
+        local width = frame.GetWidth and frame:GetWidth() or 0
+        local height = frame.GetHeight and frame:GetHeight() or 0
+
+        printed = printed + 1
+        Print(string.format("%02d %s unit=%s %s/%s x=%s y=%s size=%.0fx%.0f",
+            printed,
+            name,
+            tostring(unit),
+            shown,
+            visible,
+            tostring(x and math.floor(x + 0.5) or nil),
+            tostring(y and math.floor(y + 0.5) or nil),
+            width,
+            height
+        ))
+    end
+
+    for i = 1, 40 do
+        PrintFrame(_G["CompactRaidFrame" .. i])
+    end
+
+    for group = 1, 8 do
+        for member = 1, 5 do
+            PrintFrame(_G["CompactRaidGroup" .. group .. "Member" .. member])
+        end
+    end
+
+    local frame = EnumerateFrames()
+    while frame and printed < 30 do
+        PrintFrame(frame)
+        frame = EnumerateFrames(frame)
+    end
+
+    if printed == 0 then
+        Print("no Blizzard raid/party frame-like objects found")
+    elseif printed == 30 then
+        Print("frame debug capped at 30 results")
+    end
+end
+
+function RTC:Events()
+    if #eventLog == 0 then
+        Print("event log is empty")
+        return
+    end
+
+    for _, entry in ipairs(eventLog) do
+        Print(entry)
+    end
+end
+
 local function SlashCommand(input)
     input = string.match(string.lower(input or ""), "^%s*(.-)%s*$")
+    AddEventLog("slash " .. (input ~= "" and input or "status"))
 
     if input == "rebuild" then
+        if not next(buttons) then
+            CreateSecureCore()
+        end
         RTC:Rebuild("slash rebuild")
         RTC:Status()
     elseif input == "status" or input == "" then
         RTC:Status()
     elseif input == "dump" then
         RTC:Dump()
+    elseif input == "frames" then
+        RTC:Frames()
+    elseif input == "events" then
+        RTC:Events()
     elseif input == "reset" then
         if InCombatLockdown() then
             Print("Use the Raid Cursor Self / Reset binding in combat.")
@@ -568,28 +685,34 @@ local function SlashCommand(input)
     elseif input == "show" or input == "hide" or input == "lock" or input == "unlock" then
         Print("visual overlay was removed; RTC now only changes hard target")
     else
-        Print("commands: /rtc rebuild, /rtc status, /rtc dump, /rtc reset, /rtc debug")
+        Print("commands: /rtc rebuild, /rtc status, /rtc dump, /rtc frames, /rtc events, /rtc reset, /rtc debug")
     end
 end
 
+SLASH_RAIDTARGETCURSOR1 = "/rtc"
+SlashCmdList.RAIDTARGETCURSOR = SlashCommand
+
 local function OnEvent(_, event)
+    AddEventLog("event " .. tostring(event))
+
     if event == "PLAYER_LOGIN" then
         RaidTargetCursorDB = RaidTargetCursorDB or {}
         db = RaidTargetCursorDB
         db.debug = db.debug or false
+        db.eventLog = eventLog
 
         CreateSecureCore()
         HookBlizzardLayout()
 
-        SLASH_RAIDTARGETCURSOR1 = "/rtc"
-        SlashCmdList.RAIDTARGETCURSOR = SlashCommand
-
         ScheduleRebuild("login", 0.5)
     elseif event == "PLAYER_ENTERING_WORLD" then
         HookBlizzardLayout()
-        ScheduleRebuild("entering world", 0.5)
+        ScheduleRebuildBurst("entering world", { 0.5, 1.5, 3.0 })
     elseif event == "GROUP_ROSTER_UPDATE" or event == "RAID_ROSTER_UPDATE" then
-        ScheduleRebuild(event, 0.35)
+        ScheduleRebuildBurst(event, { 0.35, 1.0 })
+    elseif event == "PVP_MATCH_STATE_CHANGED" then
+        HookBlizzardLayout()
+        ScheduleRebuildBurst(event, { 0.25, 1.0, 3.0 })
     elseif event == "PLAYER_REGEN_DISABLED" then
         Debug("combat lockdown active")
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -608,5 +731,6 @@ EVENT_FRAME:RegisterEvent("PLAYER_REGEN_DISABLED")
 EVENT_FRAME:RegisterEvent("PLAYER_REGEN_ENABLED")
 EVENT_FRAME:RegisterEvent("PLAYER_TARGET_CHANGED")
 pcall(EVENT_FRAME.RegisterEvent, EVENT_FRAME, "RAID_ROSTER_UPDATE")
+pcall(EVENT_FRAME.RegisterEvent, EVENT_FRAME, "PVP_MATCH_STATE_CHANGED")
 
 EVENT_FRAME:SetScript("OnEvent", OnEvent)
